@@ -12,7 +12,7 @@ Avoids obstacles in the grid (represented by 0s)
 # Example Map Layout
 The map is defined as a 2D character array in the code
 
-int grid[V][V] = {
+\\\int grid[V][V] = {
   {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0},
   {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
   {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0},
@@ -24,7 +24,7 @@ int grid[V][V] = {
   {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0},
   {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
   {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0},
-};
+};\\\
 
 Legend:
   0 – Wall or obstacle
