@@ -1,21 +1,18 @@
-// Define the dimensions of the environment grid
-#define ROWS 11       // Number of rows in the grid
+#define ROWS 11       // Number of rows in the grid (environment)
 #define COLS 11       // Number of columns in the grid
 
-// Define a structure to represent a coordinate point
+// Structure to represent a coordinate point in the grid
 struct Point {
   int row, col;
 };
 
-// Define movement deltas for Up, Right, Down, Left directions
-const int dr[4] = {-1, 0, 1, 0}; // Row change for each direction
-const int dc[4] = {0, 1, 0, -1}; // Column change for each direction
-
-// Direction names for human-readable output
+// Direction arrays for movement: up, right, down, left
+const int dr[4] = {-1, 0, 1, 0}; // Row delta
+const int dc[4] = {0, 1, 0, -1}; // Column delta
 const char* directionNames[4] = {"UP", "RIGHT", "DOWN", "LEFT"};
 
-// 2D grid representing the environment
-// 1 = walkable path; 0 = obstacle or wall
+// 2D grid representing the map/environment
+// 1 = walkable cell, 0 = obstacle or wall
 int grid[ROWS][COLS] = {
   {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0},
   {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
@@ -30,68 +27,59 @@ int grid[ROWS][COLS] = {
   {0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0},
 };
 
-// Visited array for BFS search
+// Boolean array to keep track of visited cells during BFS
 bool visited[ROWS][COLS];
 
-// Parent array to reconstruct path from BFS
+// Stores the parent of each cell to reconstruct the path
 Point parent[ROWS][COLS];
 
-// Check if a given cell (r, c) is inside the grid and walkable
+// Checks if a cell (r, c) is within bounds and is walkable
 bool isValid(int r, int c) {
   return r >= 0 && r < ROWS && c >= 0 && c < COLS && grid[r][c] == 1;
 }
 
-// Initial facing direction of the robot: RIGHT (index 1)
-int currentFacingDir = 1;
+int currentFacingDir = 1; // 0=UP, 1=RIGHT, 2=DOWN, 3=LEFT (starts facing RIGHT)
 
-// Breadth-First Search to find a path from 'start' to 'end'
+// Breadth-First Search to find a path from start to end
+// Returns true if a path is found and fills in the 'parent' array
 bool bfs(Point start, Point end) {
-  // Clear previous search data
-  memset(visited, 0, sizeof(visited));
-  memset(parent, -1, sizeof(parent)); // Initialize all parent positions to -1
+  memset(visited, 0, sizeof(visited));     // Clear visited cells
+  memset(parent, -1, sizeof(parent));      // Reset parent links
 
-  // Create a queue for BFS
-  Point queue[ROWS * COLS];
+  Point queue[ROWS * COLS]; // BFS queue
   int front = 0, back = 0;
+  queue[back++] = start;                    // Enqueue start position
+  visited[start.row][start.col] = true;    // Mark as visited
 
-  // Add the start point to the queue
-  queue[back++] = start;
-  visited[start.row][start.col] = true;
-
-  // Loop through queue until it's empty or we find the end
   while (front < back) {
     Point curr = queue[front++];
 
-    // If we reached the destination
     if (curr.row == end.row && curr.col == end.col)
       return true;
 
-    // Check all 4 directions
     for (int i = 0; i < 4; ++i) {
       int nr = curr.row + dr[i];
       int nc = curr.col + dc[i];
 
-      // If the next cell is valid and not visited
       if (isValid(nr, nc) && !visited[nr][nc]) {
         visited[nr][nc] = true;
-        parent[nr][nc] = curr;       // Store where we came from
-        queue[back++] = {nr, nc};    // Add next cell to the queue
+        parent[nr][nc] = curr;
+        queue[back++] = {nr, nc};
       }
     }
   }
 
-  // Path not found
-  return false;
+  return false; // No path found
 }
 
-// Reconstructs the path from BFS and prints movement commands
+// Moves from the current position to the target and prints the steps
 bool moveAndPrint(Point &current, Point target) {
   if (!bfs(current, target)) {
     Serial.println("No path found.\n");
     return false;
   }
 
-  // Reconstruct path by following parent links backward
+  // Reconstruct path
   Point path[ROWS * COLS];
   int length = 0;
   Point temp = target;
@@ -101,15 +89,21 @@ bool moveAndPrint(Point &current, Point target) {
     temp = parent[temp.row][temp.col];
   }
 
-  // Move along the path from current to target
+  // Move forward along path
   for (int i = length - 2; i >= 0; i--) {
     Point next = path[i];
 
-    // Calculate direction to move
+    // when arriving at the box position
+    // The box is the target, which is path[0], so when i == 0, next == target
+    if (i == 0) {
+      //Serial.println("Approching Target");
+      Serial.flush();
+    }
+
+    // Calculate direction
     int dRow = next.row - current.row;
     int dCol = next.col - current.col;
 
-    // Determine which direction (UP, RIGHT, DOWN, LEFT) we are moving
     int newDir = -1;
     for (int j = 0; j < 4; ++j) {
       if (dr[j] == dRow && dc[j] == dCol) {
@@ -120,46 +114,61 @@ bool moveAndPrint(Point &current, Point target) {
 
     const char* dirName = directionNames[newDir];
 
-    // Determine robot action based on current vs new direction
+    // Determine action based on facing direction
     const char* action = "";
-    if (newDir == currentFacingDir)
+    if (newDir == currentFacingDir) {
       action = "Forward";
-    else if ((currentFacingDir + 1) % 4 == newDir)
+    } else if ((currentFacingDir + 1) % 4 == newDir) {
       action = "Turn Right";
-    else if ((currentFacingDir + 3) % 4 == newDir)
+    } else if ((currentFacingDir + 3) % 4 == newDir) {
       action = "Turn Left";
-    else
+    } else {
       action = "Reverse";
+    }
 
-    // Determine side grid values (left, center, right)
+    // Calculate left and right directions relative to newDir
     int leftDir = (newDir + 3) % 4;
     int rightDir = (newDir + 1) % 4;
 
+    // Calculate grid positions for left, center, right
     int leftRow = next.row + dr[leftDir];
     int leftCol = next.col + dc[leftDir];
     int rightRow = next.row + dr[rightDir];
     int rightCol = next.col + dc[rightDir];
 
+    // Read values safely with boundary checks
     int leftVal = -1, centerVal = -1, rightVal = -1;
 
-    if (leftRow >= 0 && leftRow < ROWS && leftCol >= 0 && leftCol < COLS)
+    if (leftRow >= 0 && leftRow < ROWS && leftCol >= 0 && leftCol < COLS) {
       leftVal = grid[leftRow][leftCol];
-    if (next.row >= 0 && next.row < ROWS && next.col >= 0 && next.col < COLS)
-      centerVal = grid[next.row][next.col];
-    if (rightRow >= 0 && rightRow < ROWS && rightCol >= 0 && rightCol < COLS)
-      rightVal = grid[rightRow][rightCol];
+    }
 
-    // Print path step details
+    if (next.row >= 0 && next.row < ROWS && next.col >= 0 && next.col < COLS) {
+      centerVal = grid[next.row][next.col];
+    }
+
+    if (rightRow >= 0 && rightRow < ROWS && rightCol >= 0 && rightCol < COLS) {
+      rightVal = grid[rightRow][rightCol];
+    }
+
+    // Print all info in the updated format
     Serial.print("(");
-    Serial.print(current.row); Serial.print(", ");
-    Serial.print(current.col); Serial.print(") > (");
-    Serial.print(next.row); Serial.print(", ");
-    Serial.print(next.col); Serial.print(")");
+    Serial.print(current.row);
+    Serial.print(", ");
+    Serial.print(current.col);
+    Serial.print(") > (");
+    Serial.print(next.row);
+    Serial.print(", ");
+    Serial.print(next.col);
+    Serial.print(")");
 
     Serial.print("| Grid: (");
-    Serial.print(leftVal); Serial.print(", ");
-    Serial.print(centerVal); Serial.print(", ");
-    Serial.print(rightVal); Serial.print(")");
+    Serial.print(leftVal);
+    Serial.print(", ");
+    Serial.print(centerVal);
+    Serial.print(", ");
+    Serial.print(rightVal);
+    Serial.print(")");
 
     Serial.print("| Facing: ");
     Serial.print(dirName);
@@ -167,17 +176,16 @@ bool moveAndPrint(Point &current, Point target) {
     Serial.print("| Act: ");
     Serial.println(action);
 
-    // Update position and facing
     current = next;
     currentFacingDir = newDir;
 
-    delay(200); // Add a delay for visualization or simulation pacing
+    delay(200);
   }
 
   return true;
 }
 
-// Find a walkable adjacent tile near the drop zone
+// Finds a walkable cell adjacent to the drop point
 bool findDropAdjacent(Point dropPoint, Point &dropTarget) {
   for (int i = 0; i < 4; ++i) {
     int nr = dropPoint.row + dr[i];
@@ -190,16 +198,15 @@ bool findDropAdjacent(Point dropPoint, Point &dropTarget) {
   return false;
 }
 
-// Arduino setup function: runs once at startup
+// Arduino setup
 void setup() {
-  Serial.begin(115200);     // Start serial communication
-  delay(1000);              // Wait for serial to initialize
+  Serial.begin(115200);
+  delay(1000);
   Serial.println("=== Robot Path Planning ===");
 
-  Point start = {9, 0};     // Initial starting position of robot
-  Point dropZone = {5, 5};  // Central drop zone location
+  Point start = {9, 0};
+  Point dropZone = {5, 5};
 
-  // Locations of all boxes to pick up
   Point boxes[] = {
     {3, 3},
     {3, 6},
@@ -207,20 +214,17 @@ void setup() {
     {9, 9}
   };
 
-  // Current position tracker
   Point current = start;
-
   Serial.print("Starting at (");
   Serial.print(current.row); Serial.print(", ");
   Serial.print(current.col); Serial.println(")");
 
-  // Process each box
   for (int i = 0; i < 4; i++) {
     Serial.print("\n>>> Moving to Box ");
     Serial.println(i + 1);
     Serial.flush();
+    //delay(10);
 
-    // Go to box location
     bool picked = moveAndPrint(current, boxes[i]);
 
     if (picked) {
@@ -228,12 +232,12 @@ void setup() {
       Serial.print(i + 1);
       Serial.println(" picked");
 
-      // Find a place to drop the box
       Point dropTarget;
       if (findDropAdjacent(dropZone, dropTarget)) {
         Serial.print(">>> Moving to Drop Zone with Box ");
         Serial.println(i + 1);
         Serial.flush();
+        //delay(10);
 
         bool dropped = moveAndPrint(current, dropTarget);
 
@@ -254,7 +258,6 @@ void setup() {
   Serial.println("\n=== All Tasks Complete ===");
 }
 
-
 void loop() {
-  // Idle
+  // Nothing to do
 }
